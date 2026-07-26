@@ -1,0 +1,1 @@
+/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/hyprdisplayTUI.dir/link.d CMakeFiles/hyprdisplayTUI.dir/src/main.cpp.o -o hyprdisplayTUI  -lcurses -lform
