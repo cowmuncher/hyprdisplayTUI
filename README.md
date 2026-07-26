@@ -1,6 +1,6 @@
 # WORK IN PROGRESS
-# This is my first experiment with C++
-# As well as ncurses
+## This is my first experiment with C++
+## As well as ncurses
 
 # hyprdisplay
 
