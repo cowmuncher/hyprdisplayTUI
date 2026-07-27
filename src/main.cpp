@@ -21,6 +21,26 @@ static std::string make_monitor_call(const Monitor& m, int x, int y,
     return oss.str();
 }
 
+static std::vector<std::string> findAvailModes(const Monitor& m) {
+    std::vector<std::string> availModes = m.modes;
+    return availModes;
+}
+
+static std::string makeModeCall(const Monitor& m, std::string mode) {
+    int x;
+    int y;
+    double hz;
+    char ex, at;
+    
+    std::ostringstream oss;
+    std::istringstream iss(mode);
+    if (iss >> x >> ex >> y >> at >> hz) {
+        oss << "hl.monitor({ output = \"" << m.name << "\""
+            << ", mode = \"" << x << "x" << y << "@" << hz << "\"})";
+    }
+    return oss.str();
+}
+
 static std::string make_disable_call(const Monitor& m) {
     return "hl.monitor({ output = \"" + m.name + "\", disabled = true })";
 }
@@ -61,17 +81,22 @@ static std::vector<std::string> monitor_list(const std::vector<Monitor>& monitor
   return lines;
 }
 
-int menuNavigation(WINDOW *menu, const std::vector<std::string> &choices, int k = 2) {
+int menuNavigation(WINDOW *menu, const std::vector<std::string> &choices, 
+                                                          int k = 2, int window = 100) {
   int highlight = 0;
   int choice_menu = -1;
 
   while (choice_menu == -1) {
     for (size_t i = 0; i < choices.size(); i++) {
       int b = 0;
-      if ( i + 1 == choices.size()) b = 1;
+      int c = 0;
+      int h = 0;
+      if ( i + 1 == choices.size()) c = 1;
+      if ( i >= window-3 ) h = 20, b = -(window-3);
+      if ( i >= 2 * (window-3)) h = 40, b = -(2 * (window-3));
       if (static_cast<int>(i) == highlight)
         wattron(menu, A_REVERSE);
-      mvwprintw(menu, i + k + b, 2, "%s", choices[i].c_str());
+      mvwprintw(menu, i + k + b + c, 2 + h, "%s", choices[i].c_str());
       if (static_cast<int>(i) == highlight) 
         wattroff(menu, A_REVERSE);
       }
@@ -188,7 +213,7 @@ int main() {
 
     int y, x;
     getmaxyx(stdscr, y, x);
-    int win_h = y * 0.6;
+    int win_h = std::max(20, static_cast<int>(y * 0.6));
     int win_w = 60;
     
     int start_y = (y - win_h) / 2;
@@ -207,8 +232,7 @@ label1:
       "Mirror display",
       "Enable/Disable display(s)",
       "Move workspace(s) across monitors",
-      "Change resolution",
-      "Change refresh rate",
+      "Change resolution/refresh rate",
       "Change display scale",
       "<Quit>"
     };
@@ -249,7 +273,8 @@ label1:
         switch (selection) {
           case 0:
             cursor_x = 0;
-            apply_rule(ipc, make_monitor_call(enabled[monSelection], cursor_x, 0, enabled[monSelection].name));
+            apply_rule(ipc, make_monitor_call(enabled[monSelection], cursor_x, 0, 
+                                                            enabled[monSelection].name));
             for (size_t i = 0; i < enabled.size(); ++i) {
               if (i != monSelection) {
                 cursor_x += (enabled[i].width + 1);
@@ -259,7 +284,8 @@ label1:
             break;
           case 1:
             cursor_x = 0;
-            apply_rule(ipc, make_monitor_call(enabled[monSelection], cursor_x, 0, enabled[monSelection].name));
+            apply_rule(ipc, make_monitor_call(enabled[monSelection], cursor_x, 0, 
+                                                            enabled[monSelection].name));
             for (size_t i = 0; i < enabled.size(); ++i) {
               if (i != monSelection) {
                 cursor_x -= (enabled[i].width + 1);
@@ -269,7 +295,8 @@ label1:
             break;
           case 2:
             cursor_y = 0;
-            apply_rule(ipc, make_monitor_call(enabled[monSelection], 0, cursor_y, enabled[monSelection].name));
+            apply_rule(ipc, make_monitor_call(enabled[monSelection], 0, cursor_y, 
+                                                            enabled[monSelection].name));
             for (size_t i = 0; i < enabled.size(); ++i) {
               if (i != monSelection) {
                 cursor_y += (enabled[i].height + 1);
@@ -279,7 +306,8 @@ label1:
             break;
           case 3:
             cursor_y = 0;
-            apply_rule(ipc, make_monitor_call(enabled[monSelection], 0, cursor_y, enabled[monSelection].name));
+            apply_rule(ipc, make_monitor_call(enabled[monSelection], 0, cursor_y, 
+                                                            enabled[monSelection].name));
             for (size_t i = 0; i < enabled.size(); ++i) {
               if (i != monSelection) {
                 cursor_y -= (enabled[i].height + 1);
@@ -371,7 +399,7 @@ label1:
         lines.push_back("<Back>");
 
         wattron(menu, A_ITALIC);
-        mvwprintw(menu, 7, 2, "Choose the monitor you want it moved to");
+        mvwprintw(menu, 7, 2, "Choose the monitor to which you want to move it");
         wattroff(menu, A_ITALIC);
 
         int monSelection = menuNavigation(menu, lines, 9);
@@ -382,6 +410,42 @@ label1:
         if (monSelection == 256) goto label1;
 
         apply_rule(ipc, make_workspace_call(enabled[monSelection], workSelection));
+
+        goto label1;
+      }
+      case 4: {
+        std::string resoTitle = "Change resolution/refresh rate";
+        dynamicTitle(menu, win_w, resoTitle);
+
+        auto lines = monitor_list(enabled);
+        lines.push_back("<Back>");
+
+        wattron(menu, A_ITALIC);
+        mvwprintw(menu, 2, 2, "Choose the monitor of which you want to change mode");
+        wattroff(menu, A_ITALIC);
+
+        int monSelection = menuNavigation(menu, lines, 4);
+
+        if (static_cast<size_t>(monSelection) == monitors.size()) {
+          goto label1;
+        }
+        if (monSelection == 256) goto label1;
+
+        dynamicTitle(menu, win_w, resoTitle);
+
+        auto availModes = findAvailModes(enabled[monSelection]);
+        availModes.push_back("<Back>");
+
+        int modeSelection = menuNavigation(menu, availModes, 2, win_h);
+
+        if (static_cast<size_t>(modeSelection) == monitors.size()) {
+          goto label1;
+        }
+        if (modeSelection == 256) goto label1;
+
+        std::string selectedMode = availModes[modeSelection];
+
+        apply_rule(ipc, makeModeCall(enabled[monSelection], selectedMode));
 
         goto label1;
       }

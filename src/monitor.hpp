@@ -14,6 +14,7 @@ struct Monitor {
     double scale = 1.0;
     bool focused = false;
     bool disabled = false;
+    std::vector<std::string> modes;
 };
 
 inline std::vector<Monitor> parse_monitors(const std::string& json_text) {
@@ -32,6 +33,7 @@ inline std::vector<Monitor> parse_monitors(const std::string& json_text) {
         m.scale = item.value("scale", 1.0);
         m.focused = item.value("focused", false);
         m.disabled = item.value("disabled", false);
+        m.modes = item.value("availableModes", std::vector<std::string>{});
         monitors.push_back(m);
     }
     return monitors;
