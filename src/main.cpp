@@ -50,6 +50,7 @@ static std::vector<std::string> monitor_list(const std::vector<Monitor>& monitor
                    << " @ " << m.refreshRate << "Hz";
         if (!m.description.empty()) oss << "  (" << truncateString(m.description, 12) << ")";
         if (m.focused) oss << " [focused]";
+        if (m.disabled) oss << " [disabled]";
         lines.push_back(oss.str());
     }
   return lines;
@@ -180,36 +181,36 @@ label1:
             for (const auto& m : enabled) {
                 apply_rule(ipc, make_monitor_call(m, cursor_x, 0, m.name));
                 cursor_x += m.width;
-            };
+            }
             break;
           case 1:
             cursor_x = 0;
             for (const auto& m : enabled) {
               apply_rule(ipc, make_monitor_call(m, cursor_x, 0, m.name));
               cursor_x -= m.width;
-            };
+            }
             break;
           case 2:
             cursor_y = 0;
             for (const auto& m : enabled) {
               apply_rule(ipc, make_monitor_call(m, 0, cursor_y, m.name));
               cursor_y += m.height;
-            };
+            }
             break;
           case 3:
             cursor_y = 0;
             for (const auto& m : enabled) {
               apply_rule(ipc, make_monitor_call(m, 0, cursor_y, m.name));
               cursor_y -= m.height;
-            };
+            }
             break;
           case 4:
             goto label1;
           case 256:
             goto label1;
-        };
+        }
         break;
-        };
+      }
       case 1: { 
         std::string mirrorTitle = "Mirror display";
         dynamicTitle(menu, win_w, mirrorTitle);
@@ -232,6 +233,27 @@ label1:
           }
         }
       }
+      case 2: {
+        std::string enableTitle = "Enable/Disable display(s)";
+        dynamicTitle(menu, win_w, enableTitle);
+
+        auto lines = monitor_list(monitors);
+        lines.push_back("Go back (Backspace)");
+        
+        int selection = menuNavigation(menu, lines);
+
+        if (static_cast<size_t>(selection) == monitors.size()) {
+          goto label1;
+        }
+        if (selection == 256) goto label1;
+        
+        size_t source = static_cast<size_t>(selection);
+        if (monitors[source].disabled) {
+          apply_rule(ipc, make_enable_call(monitors[source]));       
+        } else if (!monitors[source].disabled) {
+          apply_rule(ipc, make_disable_call(monitors[source]));
+        }
+      }
     }
 
     delwin(menu);
@@ -239,43 +261,3 @@ label1:
     endwin();
 
 }
-
-    /*
-    } else if (choice == 3) {
-        std::cout << "Which monitor should stay on? Enter its index: ";
-        size_t keep = 0;
-        std::cin >> keep;
-        if (keep >= enabled.size()) {
-            std::cerr << "Index out of range.\n";
-            return 1;
-        }
-        for (size_t i = 0; i < enabled.size(); ++i) {
-            if (i == keep) {
-                apply_rule(ipc, make_monitor_call(enabled[i], 0, 0));
-            } else {
-                apply_rule(ipc, make_disable_call(enabled[i]));
-            }
-        }
-    } else if (choice == 4) {
-        std::cout << "Which monitor would you like to enable? Enter its index: ";
-        size_t enable = 0;
-        std::cin >> enable;
-        if (enable >= disabled.size()) {
-          std::cerr << "Index out of range.\n";
-          return 1;
-        }
-        apply_rule(ipc, make_enable_call(disabled[enable]));
-    } else if (choice == 5) {
-        int cursor_y = 0;
-        for (const auto& m : enabled) {
-            apply_rule(ipc, make_monitor_call(m, 0, cursor_y, m.name));
-            cursor_y += m.height;
-        }
-    } else {
-        std::cerr << "Unknown choice.\n";
-        return 1;
-    }
-
-    std::cout << "\nDone.\n";
-    return 0;
-}*/
