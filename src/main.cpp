@@ -2,8 +2,10 @@
 #include <sstream>
 #include <ncurses.h>
 #include <panel.h>
+#include <locale.h>
 #include "hypr_ipc.hpp"
 #include "monitor.hpp"
+
 
 static std::string make_monitor_call(const Monitor& m, int x, int y,
                       const std::string& mirror_of = "", double z = 1) {
@@ -23,15 +25,18 @@ static std::string make_disable_call(const Monitor& m) {
     return "hl.monitor({ output = \"" + m.name + "\", disabled = true })";
 }
 
+static std::string make_enable_call(const Monitor& m) {
+    return "hl.monitor({ output = \"" + m.name + "\", disabled = false })";
+}
+
+static std::string make_workspace_call(const Monitor& m, int workspcNum) {
+    return "hl.dispatch(hl.dsp.workspace.move({ workspace = " + std::to_string(workspcNum) + ", monitor = \"" + m.name + "\"}))";
+}
+
 static void apply_rule(const HyprIPC& ipc, const std::string& lua_call) {
     std::string cmd = "eval " + lua_call;
     std::string reply = ipc.send(cmd);
-    std::cout << "  -> " << lua_call << "  [" << (reply.empty() ? "ok" : reply) << "]\n";
-}
-
-static std::string make_enable_call(const Monitor& m) {
-    return "hl.monitor({ output = \"" + m.name +
-           "\", mode = \"preferred\", position = \"auto\", scale = 1, disabled = false })";
+    //std::cout << "  -> " << lua_call << "  [" << (reply.empty() ? "ok" : reply) << "]\n";
 }
 
 static std::string truncateString(const std::string &text, size_t max_len) {
@@ -48,7 +53,7 @@ static std::vector<std::string> monitor_list(const std::vector<Monitor>& monitor
         std::ostringstream oss;
         oss << "[" << i << "] " << m.name << "  " << m.width << "x" << m.height
                    << " @ " << m.refreshRate << "Hz";
-        if (!m.description.empty()) oss << "  (" << truncateString(m.description, 12) << ")";
+        if (!m.description.empty()) oss << "  (" << truncateString(m.description, 8) << ")";
         if (m.focused) oss << " [focused]";
         if (m.disabled) oss << " [disabled]";
         lines.push_back(oss.str());
@@ -56,15 +61,17 @@ static std::vector<std::string> monitor_list(const std::vector<Monitor>& monitor
   return lines;
 }
 
-int menuNavigation(WINDOW *menu, const std::vector<std::string> &choices) {
+int menuNavigation(WINDOW *menu, const std::vector<std::string> &choices, int k = 2) {
   int highlight = 0;
   int choice_menu = -1;
 
   while (choice_menu == -1) {
     for (size_t i = 0; i < choices.size(); i++) {
+      int b = 0;
+      if ( i + 1 == choices.size()) b = 1;
       if (static_cast<int>(i) == highlight)
         wattron(menu, A_REVERSE);
-      mvwprintw(menu, i + 2, 2, "%s", choices[i].c_str());
+      mvwprintw(menu, i + k + b, 2, "%s", choices[i].c_str());
       if (static_cast<int>(i) == highlight) 
         wattroff(menu, A_REVERSE);
       }
@@ -75,9 +82,49 @@ int menuNavigation(WINDOW *menu, const std::vector<std::string> &choices) {
     int c = getch();
     switch (c) {
       case KEY_UP:
+      case 'k':
         highlight = (highlight - 1 + choices.size()) % choices.size();
         break;
       case KEY_DOWN:
+      case 'j':
+        highlight = (highlight + 1) % choices.size();
+        break;
+      case 10:
+        choice_menu = highlight;
+        break;
+      case KEY_BACKSPACE:
+        choice_menu = 256;
+        break;
+    }
+  }
+
+  return choice_menu;
+}
+
+int horMenuNav(WINDOW *menu, const std::vector<std::string> &choices, int k = 2, int b = 2) {
+  int highlight = 0;
+  int choice_menu = -1;
+
+  while (choice_menu == -1) {
+    for (size_t i = 0; i < choices.size(); i++) {
+      if (static_cast<int>(i) == highlight)
+        wattron(menu, A_REVERSE);
+      mvwprintw(menu, b, 3 * i + k, "%s", choices[i].c_str());
+      if (static_cast<int>(i) == highlight) 
+        wattroff(menu, A_REVERSE);
+      }
+
+    refresh();
+    wrefresh(menu);
+
+    int c = getch();
+    switch (c) {
+      case KEY_LEFT:
+      case 'h':
+        highlight = (highlight - 1 + choices.size()) % choices.size();
+        break;
+      case KEY_RIGHT:
+      case 'l':
         highlight = (highlight + 1) % choices.size();
         break;
       case 10:
@@ -94,8 +141,10 @@ int menuNavigation(WINDOW *menu, const std::vector<std::string> &choices) {
 
 int dynamicTitle(WINDOW *menu, int win_w, std::string title) {
   werase(menu);
+  wborder_set(menu, WACS_D_VLINE, WACS_D_VLINE, WACS_D_HLINE, WACS_D_HLINE,
+            WACS_D_ULCORNER, WACS_D_URCORNER, WACS_D_LLCORNER, WACS_D_LRCORNER);
   int title_c = (win_w - title.size()) / 2;
-  return mvwprintw(menu, 0, title_c, "%s", title.c_str()); 
+  return mvwprintw(menu, 0, title_c, " %s ", title.c_str());
 }
 
 int main() {
@@ -121,6 +170,7 @@ int main() {
         (m.disabled ? disabled : enabled).push_back(m);
     }
 
+    setlocale(LC_ALL, "");
     initscr();
     noecho();
     cbreak();
@@ -138,10 +188,11 @@ int main() {
 
     int y, x;
     getmaxyx(stdscr, y, x);
-    int win_h = y * 0.4;
-    int win_w = x * 0.4;
-    int start_y = y * 0.3;
-    int start_x = x * 0.3;
+    int win_h = y * 0.6;
+    int win_w = 60;
+    
+    int start_y = (y - win_h) / 2;
+    int start_x = (x - win_w) / 2;
 
     WINDOW *menu = newwin(win_h, win_w, start_y, start_x);
     wbkgd(menu, COLOR_PAIR(1));
@@ -155,7 +206,11 @@ label1:
       "Extend display",
       "Mirror display",
       "Enable/Disable display(s)",
-      "Exit"
+      "Move workspace(s) across monitors",
+      "Change resolution",
+      "Change refresh rate",
+      "Change display scale",
+      "<Quit>"
     };
 
     int selection = menuNavigation(menu, mainChoices); 
@@ -164,44 +219,72 @@ label1:
         std::string extendTitle = "Extend display";
         dynamicTitle(menu, win_w, extendTitle);
 
+        wattron(menu, A_ITALIC);
+        mvwprintw(menu, 2, 2, "Extend display with respect to monitor");
+        wattroff(menu, A_ITALIC);
+
+        auto lines = monitor_list(enabled);
+        lines.push_back("<Back>");
+
+        int monSelection = menuNavigation(menu, lines, 4);
+
+        if (static_cast<size_t>(monSelection) == enabled.size()) {
+          goto label1;
+        }
+        if (monSelection == 256) goto label1;
+
         std::vector<std::string> extendChoices = {
           "Extend right",
           "Extend left",
           "Extend down",
           "Extend up",
-          "Go back"
+          "<Back>"
         };
 
-        int selection = menuNavigation(menu, extendChoices);
+        dynamicTitle(menu, win_w, extendTitle);
+
+        int selection = menuNavigation(menu, extendChoices, 2);
         int cursor_x = 0;
         int cursor_y = 0;
         switch (selection) {
           case 0:
             cursor_x = 0;
-            for (const auto& m : enabled) {
-                apply_rule(ipc, make_monitor_call(m, cursor_x, 0, m.name));
-                cursor_x += m.width;
+            apply_rule(ipc, make_monitor_call(enabled[monSelection], cursor_x, 0, enabled[monSelection].name));
+            for (size_t i = 0; i < enabled.size(); ++i) {
+              if (i != monSelection) {
+                cursor_x += (enabled[i].width + 1);
+                apply_rule(ipc, make_monitor_call(enabled[i], cursor_x, 0, enabled[i].name));
+              }
             }
             break;
           case 1:
             cursor_x = 0;
-            for (const auto& m : enabled) {
-              apply_rule(ipc, make_monitor_call(m, cursor_x, 0, m.name));
-              cursor_x -= m.width;
+            apply_rule(ipc, make_monitor_call(enabled[monSelection], cursor_x, 0, enabled[monSelection].name));
+            for (size_t i = 0; i < enabled.size(); ++i) {
+              if (i != monSelection) {
+                cursor_x -= (enabled[i].width + 1);
+                apply_rule(ipc, make_monitor_call(enabled[i], cursor_x, 0, enabled[i].name));
+              }
             }
             break;
           case 2:
             cursor_y = 0;
-            for (const auto& m : enabled) {
-              apply_rule(ipc, make_monitor_call(m, 0, cursor_y, m.name));
-              cursor_y += m.height;
+            apply_rule(ipc, make_monitor_call(enabled[monSelection], 0, cursor_y, enabled[monSelection].name));
+            for (size_t i = 0; i < enabled.size(); ++i) {
+              if (i != monSelection) {
+                cursor_y += (enabled[i].height + 1);
+                apply_rule(ipc, make_monitor_call(enabled[i], 0, cursor_y, enabled[i].name));
+              }
             }
             break;
           case 3:
             cursor_y = 0;
-            for (const auto& m : enabled) {
-              apply_rule(ipc, make_monitor_call(m, 0, cursor_y, m.name));
-              cursor_y -= m.height;
+            apply_rule(ipc, make_monitor_call(enabled[monSelection], 0, cursor_y, enabled[monSelection].name));
+            for (size_t i = 0; i < enabled.size(); ++i) {
+              if (i != monSelection) {
+                cursor_y -= (enabled[i].height + 1);
+                apply_rule(ipc, make_monitor_call(enabled[i], 0, cursor_y, enabled[i].name));
+              }
             }
             break;
           case 4:
@@ -209,16 +292,20 @@ label1:
           case 256:
             goto label1;
         }
-        break;
+        goto label1;
       }
       case 1: { 
         std::string mirrorTitle = "Mirror display";
         dynamicTitle(menu, win_w, mirrorTitle);
 
         auto lines = monitor_list(enabled);
-        lines.push_back("Go back (Backspace)");
+        lines.push_back("<Back>");
 
-        int selection = menuNavigation(menu, lines);
+        wattron(menu, A_ITALIC);
+        mvwprintw(menu, 2, 2, "Choose the display you want others to mirror");
+        wattroff(menu, A_ITALIC);
+
+        int selection = menuNavigation(menu, lines, 4);
 
         if (static_cast<size_t>(selection) == enabled.size()) {
           goto label1;
@@ -232,15 +319,21 @@ label1:
             apply_rule(ipc, make_monitor_call(enabled[i], 0, 0, enabled[source].name));
           }
         }
+        goto label1;
       }
       case 2: {
         std::string enableTitle = "Enable/Disable display(s)";
         dynamicTitle(menu, win_w, enableTitle);
 
         auto lines = monitor_list(monitors);
-        lines.push_back("Go back (Backspace)");
+        lines.push_back("<Back>");
         
-        int selection = menuNavigation(menu, lines);
+        wattron(menu, A_ITALIC);
+        mvwprintw(menu, 2, 2, "Choose display(s) you want to enable/disable");
+        mvwprintw(menu, 3, 2, "Disabled displays are tagged with [disabled]");
+        wattroff(menu, A_ITALIC);
+
+        int selection = menuNavigation(menu, lines, 5);
 
         if (static_cast<size_t>(selection) == monitors.size()) {
           goto label1;
@@ -253,6 +346,44 @@ label1:
         } else if (!monitors[source].disabled) {
           apply_rule(ipc, make_disable_call(monitors[source]));
         }
+        goto label1;
+      }
+      case 3: {
+        std::string workspcTitle = "Move workspace(s) across monitors";
+        dynamicTitle(menu, win_w, workspcTitle);
+
+        std::vector<std::string> workspaces = {
+        };
+
+        for (size_t i = 1; i <= 10; ++i) {
+          workspaces.push_back(std::to_string(i));
+        }
+
+        wattron(menu, A_ITALIC);
+        mvwprintw(menu, 2, 2, "Choose the workspace you want to move");
+        wattroff(menu, A_ITALIC);
+
+        int workSelection = horMenuNav(menu, workspaces, 2, 4);
+
+        if (workSelection == 256) goto label1;
+
+        auto lines = monitor_list(enabled);
+        lines.push_back("<Back>");
+
+        wattron(menu, A_ITALIC);
+        mvwprintw(menu, 7, 2, "Choose the monitor you want it moved to");
+        wattroff(menu, A_ITALIC);
+
+        int monSelection = menuNavigation(menu, lines, 9);
+
+        if (static_cast<size_t>(monSelection) == monitors.size()) {
+          goto label1;
+        }
+        if (monSelection == 256) goto label1;
+
+        apply_rule(ipc, make_workspace_call(enabled[monSelection], workSelection));
+
+        goto label1;
       }
     }
 
