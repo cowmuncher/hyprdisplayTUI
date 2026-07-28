@@ -11,7 +11,7 @@ struct Monitor {
     double refreshRate = 60.0;
     int x = 0;
     int y = 0;
-    double scale = 1.0;
+    float scale = 1.0;
     bool focused = false;
     bool disabled = false;
     std::vector<std::string> modes;

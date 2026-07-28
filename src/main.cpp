@@ -8,7 +8,7 @@
 
 
 static std::string make_monitor_call(const Monitor& m, int x, int y,
-                      const std::string& mirror_of = "", double z = 1) {
+                      const std::string& mirror_of = "", float z = 1) {
     std::ostringstream oss;
     oss << "hl.monitor({ output = \"" << m.name << "\""
         << ", mode = \"" << m.width << "x" << m.height << "@" << m.refreshRate << "\""
@@ -29,7 +29,7 @@ static std::vector<std::string> findAvailModes(const Monitor& m) {
 static std::string makeModeCall(const Monitor& m, std::string mode) {
     int x;
     int y;
-    double hz;
+    float hz;
     char ex, at;
     
     std::ostringstream oss;
@@ -50,7 +50,28 @@ static std::string make_enable_call(const Monitor& m) {
 }
 
 static std::string make_workspace_call(const Monitor& m, int workspcNum) {
-    return "hl.dispatch(hl.dsp.workspace.move({ workspace = " + std::to_string(workspcNum) + ", monitor = \"" + m.name + "\"}))";
+    return "hl.dispatch(hl.dsp.workspace.move({ workspace = " + std::to_string(workspcNum) 
+                                                      + ", monitor = \"" + m.name + "\"}))";
+}
+
+static std::string getInput(WINDOW* menu, int y, int x, int maxLen = 3) {
+    std::string input;
+    
+    echo();
+    curs_set(1);
+    mvwgetnstr(menu, y, x, input.data(), maxLen);
+
+    curs_set(0);
+    noecho();
+    return input;
+}
+
+float parseInput(const std::string& input) {
+    try {
+        return std::stof(input);
+    } catch (...) {
+        return std::nanf("");
+    }
 }
 
 static void apply_rule(const HyprIPC& ipc, const std::string& lua_call) {
@@ -196,6 +217,7 @@ int main() {
     }
 
     setlocale(LC_ALL, "");
+    setlocale(LC_NUMERIC, "C");
     initscr();
     noecho();
     cbreak();
@@ -447,6 +469,41 @@ label1:
 
         apply_rule(ipc, makeModeCall(enabled[monSelection], selectedMode));
 
+        goto label1;
+      }
+      case 5: {
+        std::string scaleTitle = "Change display scale";
+        dynamicTitle(menu, win_w, scaleTitle);
+
+        auto lines = monitor_list(enabled);
+        lines.push_back("<Back>");
+
+        wattron(menu, A_ITALIC);
+        mvwprintw(menu, 2, 2, "Choose the monitor of which you want to change scale");
+        wattroff(menu, A_ITALIC);
+
+        int monSelection = menuNavigation(menu, lines, 4);
+
+        if (static_cast<size_t>(monSelection) == monitors.size()) {
+          goto label1;
+        }
+        if (monSelection == 256) goto label1;
+
+        dynamicTitle(menu, win_w, scaleTitle);
+
+        wattron(menu, A_ITALIC);
+        mvwprintw(menu, 2, 2, "Type your desired display scale");
+        mvwprintw(menu, 3, 2, "Example: 0.8");
+        wattroff(menu, A_ITALIC);
+
+        std::string input = getInput(menu, 5, (win_w - 3) / 2);
+
+
+        float parsedInput = parseInput(input);
+        if (!std::isnan(parsedInput)) {
+          apply_rule(ipc, make_monitor_call(enabled[monSelection], 0, 0, 
+                                                    enabled[monSelection].name, parsedInput)); 
+        }
         goto label1;
       }
     }
