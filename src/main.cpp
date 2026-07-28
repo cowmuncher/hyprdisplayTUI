@@ -297,10 +297,11 @@ label1:
             cursor_x = 0;
             apply_rule(ipc, make_monitor_call(enabled[monSelection], cursor_x, 0, 
                                                             enabled[monSelection].name));
+            cursor_x = (enabled[monSelection].width + 1);
             for (size_t i = 0; i < enabled.size(); ++i) {
               if (i != monSelection) {
-                cursor_x += (enabled[i].width + 1);
                 apply_rule(ipc, make_monitor_call(enabled[i], cursor_x, 0, enabled[i].name));
+                cursor_x += (enabled[i].width + 1);
               }
             }
             break;
@@ -308,10 +309,11 @@ label1:
             cursor_x = 0;
             apply_rule(ipc, make_monitor_call(enabled[monSelection], cursor_x, 0, 
                                                             enabled[monSelection].name));
+            cursor_x = -(enabled[monSelection].width + 1);
             for (size_t i = 0; i < enabled.size(); ++i) {
               if (i != monSelection) {
-                cursor_x -= (enabled[i].width + 1);
                 apply_rule(ipc, make_monitor_call(enabled[i], cursor_x, 0, enabled[i].name));
+                cursor_x -= (enabled[i].width + 1);
               }
             }
             break;
@@ -319,10 +321,11 @@ label1:
             cursor_y = 0;
             apply_rule(ipc, make_monitor_call(enabled[monSelection], 0, cursor_y, 
                                                             enabled[monSelection].name));
+            cursor_y = (enabled[monSelection].height + 1);
             for (size_t i = 0; i < enabled.size(); ++i) {
               if (i != monSelection) {
-                cursor_y += (enabled[i].height + 1);
                 apply_rule(ipc, make_monitor_call(enabled[i], 0, cursor_y, enabled[i].name));
+                cursor_y += (enabled[i].height + 1);
               }
             }
             break;
@@ -330,10 +333,11 @@ label1:
             cursor_y = 0;
             apply_rule(ipc, make_monitor_call(enabled[monSelection], 0, cursor_y, 
                                                             enabled[monSelection].name));
+            cursor_y = -(enabled[monSelection].height + 1);
             for (size_t i = 0; i < enabled.size(); ++i) {
               if (i != monSelection) {
-                cursor_y -= (enabled[i].height + 1);
                 apply_rule(ipc, make_monitor_call(enabled[i], 0, cursor_y, enabled[i].name));
+                cursor_y -= (enabled[i].height + 1);
               }
             }
             break;
